@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Config Editor</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <div id="app">
+    <div id="toast-container"></div>
+    <div id="editor-root"></div>
+
+  <template id="tpl-empty-state">
+    <div id="empty-state">
+      <p>暂无配置数据。</p>
+      <p>上传 JSON/Excel 文件或点击新建。</p>
+      <button id="btn-new-config">新建配置</button>
+    </div>
+  </template>
+  </div>
+
+  <script src="../lib/xlsx.full.min.js"></script>
+  <script type="module" src="editor.js"></script>
+
+  <!-- Templates: Top Form -->
+  <template id="tpl-top-form">
+    <div class="top-form">
+      <div class="top-row">
+        <label>实验名称: <input type="text" class="field-name" maxlength="30"></label>
+        <label>实验学科:
+          <select class="field-subjectType">
+            <option value="1">物理</option>
+            <option value="2">化学</option>
+            <option value="3">生物</option>
+          </select>
+        </label>
+        <div class="btn-group">
+          <button class="btn btn-primary btn-upload-excel">上传Excel</button>
+          <button class="btn btn-primary btn-upload-json">上传配置</button>
+          <button class="btn btn-default btn-preview">预览配置</button>
+          <button class="btn btn-success btn-save">保存配置</button>
+          <button class="btn btn-success btn-export-upload">导出配置</button>
+          <button class="btn btn-danger btn-clear">清空配置</button>
+        </div>
+      </div>
+      <div class="top-row">
+        <label>实验编码: <input type="text" class="field-experimentCode" maxlength="30"></label>
+        <label>算法版本: <input type="text" class="field-version" maxlength="30"></label>
+        <div class="btn-group">
+          <button class="btn btn-success btn-export-platform">导出平台配置</button>
+          <button class="btn btn-success btn-export-box">导出盒子配置</button>
+        </div>
+      </div>
+      <div class="top-row">
+        <label>报告类型:
+          <select class="field-paperType">
+            <option value="0">没有实验报告</option>
+            <option value="1">电子实验报告</option>
+            <option value="2">拍照实验报告</option>
+          </select>
+        </label>
+        <label>评分等级:
+          <select class="field-ratingLevel">
+            <option value="1">简易</option>
+            <option value="2">中等</option>
+            <option value="3">标准</option>
+          </select>
+        </label>
+        <label>实验总分: <input type="number" class="field-experimentTotalScore" step="0.1" min="0" max="1000"></label>
+        <span class="stat score-stat" id="stat-step-score"></span>
+      </div>
+      <input type="file" id="file-excel" accept=".xlsx,.xls" style="display:none;">
+      <input type="file" id="file-json" accept=".json" style="display:none;">
+    </div>
+  </template>
+
+  <!-- Template: Step Row -->
+  <template id="tpl-step-row">
+    <div class="step-row">
+      <div class="step-header">
+        <span class="drag-handle" draggable="true">&#x2630;</span>
+        <span class="step-index"></span>
+        <label>类型:
+          <select class="field-stepType">
+            <option value="0">操作步骤</option>
+            <option value="1">报告步骤</option>
+            <option value="9">混合步骤</option>
+          </select>
+        </label>
+        <label>编码: <input type="text" class="field-stepCode" style="width:80px"></label>
+        <label>步骤分: <input type="number" class="field-stepTotalScore" step="0.1" min="0" max="100" style="width:80px"></label>
+        <span class="stat" style="color:#888"></span>
+        <label>AI评分类型:
+          <select class="field-stepDefaultScoreType">
+            <option value="0">默认0分</option>
+            <option value="1">默认满分</option>
+          </select>
+        </label>
+        <label>AI评分:
+          <select class="field-stepEnable">
+            <option value="1">开</option>
+            <option value="0">关</option>
+          </select>
+        </label>
+        <button class="btn btn-sm btn-success btn-add-sp">+ 评分点</button>
+        <button class="btn btn-sm btn-warning btn-remove-step">移除步骤</button>
+        <button class="btn btn-sm btn-default btn-toggle-step">展开</button>
+      </div>
+      <div class="step-desc-row" style="display:none;">
+        <label>步骤描述: <input type="text" class="field-stepDesc"></label>
+        <label>步骤名称: <input type="text" class="field-stepName" style="width:150px"></label>
+        <div class="finished-rules-area">
+          <span class="finished-rules-label">完成规则:</span>
+          <div class="finished-rules-section"></div>
+        </div>
+      </div>
+      <div class="step-children" style="display:none;"></div>
+    </div>
+  </template>
+
+  <!-- Template: ScorePoint Row -->
+  <template id="tpl-scorepoint-row">
+    <div class="scorepoint-row">
+      <div class="scorepoint-header">
+        <label>类型:
+          <select class="field-scoreType">
+            <option value="0">操作评分点</option>
+            <option value="1">报告评分点</option>
+            <option value="9">混合评分点</option>
+          </select>
+        </label>
+        <label>编码: <input type="text" class="field-scoreCode" style="width:80px"></label>
+        <span class="scorepoint-score-is-correct-area">
+          <label>得分类型:
+            <select class="field-scoreIsCorrect">
+              <option value="0">减分</option>
+              <option value="1">加分</option>
+            </select>
+          </label>
+        </span>
+        <label>评分点分值: <input type="number" class="field-scoreTotalScore" step="0.1" min="0" max="100" style="width:80px"></label>
+        <span class="stat" style="color:#888"></span>
+        <label>AI评分类型:
+          <select class="field-scoreDefaultScoreType">
+            <option value="0">默认0分</option>
+            <option value="1">默认满分</option>
+          </select>
+        </label>
+        <label>AI评分:
+          <select class="field-scoreEnable">
+            <option value="1">开</option>
+            <option value="0">关</option>
+          </select>
+        </label>
+        <button class="btn btn-sm btn-success btn-add-se">+ 评分事件</button>
+        <button class="btn btn-sm btn-warning btn-remove-sp">移除评分点</button>
+        <button class="btn btn-sm btn-default btn-toggle-sp">展开</button>
+      </div>
+      <div class="scorepoint-desc-row" style="display:none;">
+        <label>评分点描述: <input type="text" class="field-scoreDesc"></label>
+      </div>
+      <div class="scorepoint-children" style="display:none;"></div>
+    </div>
+  </template>
+
+  <!-- Template: ScoreEvent Row -->
+  <template id="tpl-scoreevent-row">
+    <div class="scoreevent-row">
+      <div class="scoreevent-header">
+        <label>类型:
+          <select class="field-scoreEventType">
+            <option value="0">操作评分事件</option>
+            <option value="1">报告评分事件</option>
+            <option value="2">拍照评分事件</option>
+          </select>
+        </label>
+        <label>编码: <input type="text" class="field-scoreEventCode" style="width:80px"></label>
+        <label>得分类型:
+          <select class="field-scoreEventIsCorrect">
+            <option value="0">减分</option>
+            <option value="1">加分</option>
+          </select>
+        </label>
+        <label>分值: <input type="number" class="field-scoreEventValue" step="0.1" min="0" max="100" style="width:80px"></label>
+        <span class="stat" style="display:none;color:#888"></span>
+        <label>AI评分类型:
+          <select class="field-scoreEventDefaultStatus">
+            <option value="0">默认0分</option>
+            <option value="1">默认满分</option>
+          </select>
+        </label>
+        <label>AI评分:
+          <select class="field-scoreEventEnable">
+            <option value="1">开</option>
+            <option value="0">关</option>
+          </select>
+        </label>
+        <button class="btn btn-sm btn-success btn-add-ae">+ AI事件</button>
+        <button class="btn btn-sm btn-warning btn-remove-se">移除评分事件</button>
+        <button class="btn btn-sm btn-default btn-toggle-se">展开</button>
+      </div>
+      <div class="scoreevent-desc-row" style="display:none;">
+        <label>评分事件描述: <input type="text" class="field-scoreEventDesc"></label>
+      </div>
+      <div class="scoreevent-children" style="display:none;"></div>
+    </div>
+  </template>
+
+  <!-- Template: AIEvent Row -->
+  <template id="tpl-aievent-row">
+    <div class="aievent-row">
+      <label>AI事件编码: <input type="text" class="field-eventCode" style="width:100px"></label>
+      <label style="display:none">分值: <input type="number" class="field-eventScore" step="0.1" style="width:60px"></label>
+      <label>持续帧数: <input type="number" class="field-duration" step="1" min="0" max="100" style="width:60px"></label>
+      <div class="event-deps-section"></div>
+      <label>AI事件描述: <input type="text" class="field-eventDesc" style="width:380px"></label>
+      <button class="btn btn-sm btn-warning btn-remove-ae">移除AI事件</button>
+    </div>
+  </template>
+
+  <!-- Template: Event Dependency Row -->
+  <template id="tpl-eventdep-row">
+    <div class="eventdep-row">
+      <select class="field-depType">
+        <option value="OCCURRING_ALL">OCCURRING_ALL</option>
+        <option value="OCCURRED_ALL">OCCURRED_ALL</option>
+        <option value="OCCURRED_STEP">OCCURRED_STEP</option>
+        <option value="OCCURRED_ANY">OCCURRED_ANY</option>
+        <option value="NOT_OCCURRED_ANY">NOT_OCCURRED_ANY</option>
+      </select>
+      <select class="field-depEventCodes" multiple style="width:300px"></select>
+      <button class="btn btn-sm btn-warning btn-remove-dep">-</button>
+    </div>
+  </template>
+
+  <!-- Template: Finished Rule Row -->
+  <template id="tpl-finishedrule-row">
+    <div class="finishedrule-row">
+      <select class="field-ruleEventCodes" multiple style="width:300px"></select>
+      <button class="btn btn-sm btn-warning btn-remove-rule">-</button>
+    </div>
+  </template>
+
+  <!-- Template: Error Event Row -->
+  <template id="tpl-error-event-row">
+    <div class="error-event-row">
+      <label>AI事件编码: <input type="text" class="field-eventCode" style="width:100px"></label>
+      <label>分值: <input type="number" class="field-eventScore" step="0.1" style="width:60px" min="-100" max="100"></label>
+      <label>持续帧数: <input type="number" class="field-duration" step="1" min="0" max="100" style="width:60px"></label>
+      <label>归属步骤:
+        <select class="field-belongStep"></select>
+      </label>
+      <div class="event-deps-section"></div>
+      <label>AI事件描述: <input type="text" class="field-eventDesc" style="width:380px"></label>
+      <button class="btn btn-sm btn-warning btn-remove-ee">移除</button>
+    </div>
+  </template>
+</body>
+</html>
