@@ -80,8 +80,9 @@ function convertConfigObject(sheetArray) {
     errorEvents: [],
   };
 
-  configObject.name = sheetArray[0] && sheetArray[0][0] ? String(sheetArray[0][0]) : '';
-  configObject.experimentCode = sheetArray[0] && sheetArray[0][1] !== undefined ? String(sheetArray[0][1]) : '';
+  configObject.name = sheetArray[1] && sheetArray[1][0] ? String(sheetArray[1][0]) : '';
+  configObject.experimentCode = sheetArray[1] && sheetArray[1][1] !== undefined ? String(sheetArray[1][1]) : '';
+  configObject.subjectType = Number(configObject.experimentCode.slice(8, 9)) || 1;
 
   const steps = [];
   let currentStep = null;
