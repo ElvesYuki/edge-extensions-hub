@@ -67,6 +67,9 @@ function renderTopForm(configJson, callbacks) {
   root.querySelector('.btn-upload-json').addEventListener('click', () => {
     root.querySelector('#file-json').click();
   });
+  root.querySelector('.btn-restore-backup').addEventListener('click', () => {
+    if (callbacks.onRestoreBackup) callbacks.onRestoreBackup();
+  });
   root.querySelector('.btn-export-upload').addEventListener('click', () => {
     syncFromDOM();
     if (callbacks.onExportUpload) callbacks.onExportUpload();

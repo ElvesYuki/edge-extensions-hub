@@ -17,6 +17,7 @@ const storage = {
 };
 
 const STORE_KEY = 'LOCAL_CONFIG_JSON';
+const BACKUP_STORE_KEY = 'LOCAL_CONFIG_JSON_BACKUP';
 
 const store = {
   async loadConfig() {
@@ -45,6 +46,30 @@ const store = {
     }
   },
 
+  async backupCurrentConfig() {
+    const data = await storage.get([STORE_KEY]);
+    if (!data[STORE_KEY]) return false;
+    await storage.set({ [BACKUP_STORE_KEY]: data[STORE_KEY] });
+    return true;
+  },
+
+  async restoreBackupConfig() {
+    const data = await storage.get([BACKUP_STORE_KEY]);
+    if (!data[BACKUP_STORE_KEY]) return null;
+    await storage.set({ [STORE_KEY]: data[BACKUP_STORE_KEY] });
+    try {
+      return JSON.parse(data[BACKUP_STORE_KEY]);
+    } catch (e) {
+      console.error('Failed to parse backup config:', e);
+      return null;
+    }
+  },
+
+  async backupExists() {
+    const data = await storage.get([BACKUP_STORE_KEY]);
+    return !!data[BACKUP_STORE_KEY];
+  },
+
   async clearConfig() {
     await storage.remove([STORE_KEY]);
   },
@@ -55,4 +80,4 @@ const store = {
   },
 };
 
-export { storage, store, STORE_KEY };
+export { storage, store, STORE_KEY, BACKUP_STORE_KEY };

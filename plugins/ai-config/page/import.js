@@ -1,6 +1,32 @@
 import { store } from './store.js';
 import { formatConfigJson } from './model.js';
 
+const EXCEL_META_ROW = 1;
+const EXCEL_DATA_START_ROW = 1;
+const EXCEL_COLUMNS = {
+  experimentName: 0,
+  experimentCode: 1,
+  stepNum: 2,
+  stepCode: 3,
+  stepType: 4,
+  stepName: 5,
+  stepDesc: 6,
+  stepTotalScore: 7,
+  scorePointCode: 8,
+  scorePointType: 9,
+  scorePointDesc: 10,
+  scorePointTotalScore: 11,
+  scorePointEnable: 12,
+  scoreEventCode: 13,
+  scoreEventType: 14,
+  scoreEventDesc: 15,
+  scoreEventValue: 16,
+  scoreEventIsCorrect: 17,
+  scoreEventEnable: 18,
+  aiEventCode: 19,
+  aiEventDesc: 20,
+};
+
 function readFileAsText(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -31,6 +57,7 @@ async function importJsonFile(file) {
   const err = formatConfigJson(configJson);
   if (err) return err;
 
+  await store.backupCurrentConfig();
   await store.saveConfig(configJson);
   return null;
 }
@@ -63,6 +90,7 @@ async function importExcelFile(file) {
   const err = formatConfigJson(configObject);
   if (err) return err;
 
+  await store.backupCurrentConfig();
   await store.saveConfig(configObject);
   return null;
 }
@@ -80,8 +108,9 @@ function convertConfigObject(sheetArray) {
     errorEvents: [],
   };
 
-  configObject.name = sheetArray[1] && sheetArray[1][0] ? String(sheetArray[1][0]) : '';
-  configObject.experimentCode = sheetArray[1] && sheetArray[1][1] !== undefined ? String(sheetArray[1][1]) : '';
+  const metaRow = sheetArray[EXCEL_META_ROW] || [];
+  configObject.name = toStringValue(metaRow[EXCEL_COLUMNS.experimentName]);
+  configObject.experimentCode = toStringValue(metaRow[EXCEL_COLUMNS.experimentCode]);
   configObject.subjectType = Number(configObject.experimentCode.slice(8, 9)) || 1;
 
   const steps = [];
@@ -89,29 +118,23 @@ function convertConfigObject(sheetArray) {
   let currentScorePoint = null;
   let currentScoreEvent = null;
 
-  for (let i = 1; i < sheetArray.length; i++) {
+  for (let i = EXCEL_DATA_START_ROW; i < sheetArray.length; i++) {
     const row = sheetArray[i];
-    if (!row || row.every(cell => cell === '' || cell === undefined || cell === null)) continue;
+    if (!row || row.every(isEmptyCell)) continue;
 
-    const stepNum = row[2];
-    const scorePointCode = row[8];
-    const scoreEventCode = row[13];
-    const eventCode = row[19];
+    const stepNum = row[EXCEL_COLUMNS.stepNum];
+    const scorePointCode = row[EXCEL_COLUMNS.scorePointCode];
+    const scoreEventCode = row[EXCEL_COLUMNS.scoreEventCode];
+    const eventCode = row[EXCEL_COLUMNS.aiEventCode];
 
-    if (stepNum !== '' && stepNum !== undefined && stepNum !== null) {
-      // Parse stepType from text
-      let stepType = 0;
-      const stepTypeText = String(row[4] || '');
-      if (stepTypeText.includes('报告')) stepType = 1;
-      if (stepTypeText.includes('混合')) stepType = 9;
-
+    if (!isEmptyCell(stepNum)) {
       currentStep = {
-        stepCode: String(row[3] || ''),
+        stepCode: toStringValue(row[EXCEL_COLUMNS.stepCode]),
         stepNum: Number(stepNum),
-        stepType: stepType,
-        stepTotalScore: Number(row[7]) || 0,
-        stepDesc: String(row[6] || ''),
-        stepName: String(row[5] || ''),
+        stepType: parseStepType(row[EXCEL_COLUMNS.stepType]),
+        stepTotalScore: Number(row[EXCEL_COLUMNS.stepTotalScore]) || 0,
+        stepDesc: toStringValue(row[EXCEL_COLUMNS.stepDesc]),
+        stepName: toStringValue(row[EXCEL_COLUMNS.stepName]),
         stepEnable: 1,
         stepDefaultScoreType: 1,
         stepDeps: [],
@@ -125,22 +148,15 @@ function convertConfigObject(sheetArray) {
 
     if (!currentStep) continue;
 
-    if (scorePointCode !== '' && scorePointCode !== undefined && scorePointCode !== null) {
-      // Parse scoreType from text
-      let scoreType = 0;
-      const scoreTypeText = String(row[9] || '');
-      if (scoreTypeText.includes('报告')) scoreType = 1;
-      if (scoreTypeText.includes('拍照')) scoreType = 2;
-      if (scoreTypeText.includes('混合')) scoreType = 9;
-
+    if (!isEmptyCell(scorePointCode)) {
       currentScorePoint = {
         scoreCode: String(scorePointCode),
-        scoreType: scoreType,
-        scoreDesc: String(row[10] || ''),
-        scoreEnable: row[12] !== undefined && row[12] !== '' ? Number(row[12]) : 1,
+        scoreType: parseScorePointType(row[EXCEL_COLUMNS.scorePointType]),
+        scoreDesc: toStringValue(row[EXCEL_COLUMNS.scorePointDesc]),
+        scoreEnable: toNumberValue(row[EXCEL_COLUMNS.scorePointEnable], 1),
         scoreDefaultScoreType: 1,
         scoreIsCorrect: 1,
-        scoreTotalScore: Number(row[11]) || 0,
+        scoreTotalScore: Number(row[EXCEL_COLUMNS.scorePointTotalScore]) || 0,
         scoreEvents: [],
       };
       currentStep.scorePoints.push(currentScorePoint);
@@ -149,26 +165,15 @@ function convertConfigObject(sheetArray) {
 
     if (!currentScorePoint) continue;
 
-    if (scoreEventCode !== '' && scoreEventCode !== undefined && scoreEventCode !== null) {
-      // Parse scoreEventType from text
-      let scoreEventType = 0;
-      const seTypeText = String(row[14] || '');
-      if (seTypeText.includes('报告')) scoreEventType = 1;
-      if (seTypeText.includes('拍照')) scoreEventType = 2;
-
-      // Parse scoreEventIsCorrect from text (col 17)
-      let scoreEventIsCorrect = 1;
-      const isCorrectText = String(row[17] || '');
-      if (isCorrectText.includes('错误')) scoreEventIsCorrect = 0;
-
+    if (!isEmptyCell(scoreEventCode)) {
       currentScoreEvent = {
         scoreEventCode: String(scoreEventCode),
-        scoreEventType: scoreEventType,
-        scoreEventDesc: String(row[15] || ''),
-        scoreEventEnable: row[18] !== undefined && row[18] !== '' ? Number(row[18]) : 1,
+        scoreEventType: parseScoreEventType(row[EXCEL_COLUMNS.scoreEventType]),
+        scoreEventDesc: toStringValue(row[EXCEL_COLUMNS.scoreEventDesc]),
+        scoreEventEnable: toNumberValue(row[EXCEL_COLUMNS.scoreEventEnable], 1),
         scoreEventDefaultStatus: 1,
-        scoreEventIsCorrect: scoreEventIsCorrect,
-        scoreEventValue: Number(row[16]) || 0,
+        scoreEventIsCorrect: parseScoreEventIsCorrect(row[EXCEL_COLUMNS.scoreEventIsCorrect]),
+        scoreEventValue: Number(row[EXCEL_COLUMNS.scoreEventValue]) || 0,
         scoreEventStatus: 0,
         events: [],
       };
@@ -177,10 +182,10 @@ function convertConfigObject(sheetArray) {
 
     if (!currentScoreEvent) continue;
 
-    if (eventCode !== '' && eventCode !== undefined && eventCode !== null) {
+    if (!isEmptyCell(eventCode)) {
       const aiEvent = {
         eventCode: String(eventCode),
-        eventDesc: String(row[20] || ''),
+        eventDesc: toStringValue(row[EXCEL_COLUMNS.aiEventDesc]),
         eventScore: 0,
         duration: 1,
         eventPriority: 1,
@@ -193,6 +198,44 @@ function convertConfigObject(sheetArray) {
 
   configObject.steps = steps;
   return configObject;
+}
+
+function isEmptyCell(value) {
+  return value === '' || value === undefined || value === null;
+}
+
+function toStringValue(value) {
+  return isEmptyCell(value) ? '' : String(value);
+}
+
+function toNumberValue(value, defaultValue) {
+  return isEmptyCell(value) ? defaultValue : Number(value);
+}
+
+function parseStepType(value) {
+  const text = toStringValue(value);
+  if (text.includes('混合')) return 9;
+  if (text.includes('报告')) return 1;
+  return 0;
+}
+
+function parseScorePointType(value) {
+  const text = toStringValue(value);
+  if (text.includes('混合')) return 9;
+  if (text.includes('拍照')) return 2;
+  if (text.includes('报告')) return 1;
+  return 0;
+}
+
+function parseScoreEventType(value) {
+  const text = toStringValue(value);
+  if (text.includes('拍照')) return 2;
+  if (text.includes('报告')) return 1;
+  return 0;
+}
+
+function parseScoreEventIsCorrect(value) {
+  return toStringValue(value).includes('错误') ? 0 : 1;
 }
 
 async function handleFileImport(file, fileType) {
